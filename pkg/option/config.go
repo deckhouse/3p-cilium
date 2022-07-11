@@ -2404,9 +2404,9 @@ func (c *DaemonConfig) AlwaysAllowLocalhost() bool {
 	}
 }
 
-// TunnelingEnabled returns true if tunneling is enabled, i.e. not set to "disabled".
+// TunnelingEnabled returns true if tunneling is enabled.
 func (c *DaemonConfig) TunnelingEnabled() bool {
-	return c.Tunnel != TunnelDisabled
+	return c.RoutingMode == RoutingModeTunnel
 }
 
 // TunnelExists returns true if some traffic may go through a tunnel, including
@@ -2442,7 +2442,7 @@ func (c *DaemonConfig) IptablesMasqueradingEnabled() bool {
 // NodeIpsetNeeded returns true if a node ipsets should be used to skip
 // masquerading for traffic to cluster nodes.
 func (c *DaemonConfig) NodeIpsetNeeded() bool {
-	return c.Tunnel == TunnelDisabled && c.IptablesMasqueradingEnabled()
+	return !c.TunnelingEnabled() && c.IptablesMasqueradingEnabled()
 }
 
 // RemoteNodeIdentitiesEnabled returns true if the remote-node identity feature
@@ -2989,8 +2989,15 @@ func (c *DaemonConfig) Populate() {
 		log.Fatalf("Option --%s cannot be used in combination with --%s", RoutingMode, TunnelName)
 	}
 
+	if c.Tunnel == "disabled" {
+		c.RoutingMode = RoutingModeNative
+	} else if c.Tunnel != "" {
+		c.TunnelProtocol = c.Tunnel
+	}
+	c.Tunnel = ""
+
 	if c.TunnelPort == 0 {
-		switch c.Tunnel {
+		switch c.TunnelProtocol {
 		case TunnelVXLAN:
 			c.TunnelPort = defaults.TunnelPortVXLAN
 		case TunnelGeneve:
@@ -3460,12 +3467,12 @@ func (c *DaemonConfig) checkMapSizeLimits() error {
 }
 
 func (c *DaemonConfig) checkIPv4NativeRoutingCIDR() error {
-	if c.GetIPv4NativeRoutingCIDR() == nil && c.EnableIPv4Masquerade && c.Tunnel == TunnelDisabled &&
+	if c.GetIPv4NativeRoutingCIDR() == nil && c.EnableIPv4Masquerade && !c.TunnelingEnabled() &&
 		c.IPAMMode() != ipamOption.IPAMENI && c.EnableIPv4 && c.IPAMMode() != ipamOption.IPAMAlibabaCloud {
 		return fmt.Errorf(
 			"native routing cidr must be configured with option --%s "+
 				"in combination with --%s --%s=%s --%s=%s --%s=true",
-			IPv4NativeRoutingCIDR, EnableIPv4Masquerade, TunnelName, c.Tunnel,
+			IPv4NativeRoutingCIDR, EnableIPv4Masquerade, RoutingMode, RoutingModeNative,
 			IPAM, c.IPAMMode(), EnableIPv4Name)
 	}
 
@@ -3473,12 +3480,12 @@ func (c *DaemonConfig) checkIPv4NativeRoutingCIDR() error {
 }
 
 func (c *DaemonConfig) checkIPv6NativeRoutingCIDR() error {
-	if c.GetIPv6NativeRoutingCIDR() == nil && c.EnableIPv6Masquerade && c.Tunnel == TunnelDisabled &&
+	if c.GetIPv6NativeRoutingCIDR() == nil && c.EnableIPv6Masquerade && !c.TunnelingEnabled() &&
 		c.EnableIPv6 {
 		return fmt.Errorf(
 			"native routing cidr must be configured with option --%s "+
 				"in combination with --%s --%s=%s --%s=true",
-			IPv6NativeRoutingCIDR, EnableIPv6Masquerade, TunnelName, c.Tunnel,
+			IPv6NativeRoutingCIDR, EnableIPv6Masquerade, RoutingMode, RoutingModeNative,
 			EnableIPv6Name)
 	}
 
